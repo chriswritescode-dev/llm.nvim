@@ -209,7 +209,7 @@ function M.setup()
     root_dir = vim.fs.dirname(vim.fs.find({ ".git" }, { upward = true })[1]),
     capabilities = {
       general = {
-        positionEncodings = { "utf-8", "utf-16" }
+        positionEncodings = { "utf-16" }
       }
     }
   })
