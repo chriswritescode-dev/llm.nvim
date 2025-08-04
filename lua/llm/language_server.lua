@@ -206,8 +206,12 @@ function M.setup()
     name = "llm-ls",
     cmd = cmd,
     cmd_env = config.get().lsp.cmd_env,
-    root_dir = vim.fs.dirname(vim.fs.find({ ".git" }, { upward = true })[1]),
-    offset_encoding = 'utf-16',
+    root_dir = vim.fs.dirname(vim.fs.find({ ".git" }, { upward = true })[1]),i
+    capabilities = {
+      general = {
+        positionEncodings = { "utf-8", "utf-16" }
+      }
+    }
   })
 
   if client_id == nil then
