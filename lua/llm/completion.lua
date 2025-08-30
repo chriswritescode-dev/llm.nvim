@@ -83,8 +83,8 @@ function M.lsp_suggest()
     local col = context.params.position.character
     local line = context.params.position.line
     local extmark = {
-      virt_text_win_col = col,
       virt_text = { { lines[1], M.hl_group } },
+      virt_text_pos = "eol",
     }
     if #lines > 1 then
       extmark.virt_lines = {}
