@@ -13,6 +13,35 @@ local function create_cmds()
   vim.api.nvim_create_user_command("LLMSuggestion", function()
     completion.lsp_suggest()
   end, {})
+  
+  vim.api.nvim_create_user_command("LLMStop", function()
+    llm_ls.stop()
+    vim.notify("[LLM] Language server stopped", vim.log.levels.INFO)
+  end, {})
+  
+  vim.api.nvim_create_user_command("LLMRestart", function()
+    llm_ls.stop()
+    vim.defer_fn(function()
+      llm_ls.setup()
+      vim.notify("[LLM] Language server restarted", vim.log.levels.INFO)
+    end, 500)
+  end, {})
+  
+  vim.api.nvim_create_user_command("LLMDebug", function()
+    local client = vim.lsp.get_client_by_id(llm_ls.client_id)
+    if client then
+      local pid = client.rpc and client.rpc.pid or "unknown"
+      vim.notify(string.format("[LLM] Client active, PID: %s", tostring(pid)), vim.log.levels.INFO)
+    else
+      vim.notify("[LLM] No active client", vim.log.levels.INFO)
+    end
+    
+    -- Check for any llm-ls processes
+    local ps_output = vim.fn.system("ps aux | grep llm-ls | grep -v grep")
+    if ps_output ~= "" then
+      vim.notify("[LLM] Running llm-ls processes:\n" .. ps_output, vim.log.levels.INFO)
+    end
+  end, {})
 end
 
 function M.setup(opts)

@@ -9,6 +9,8 @@ local M = {
   setup_done = false,
 
   client_id = nil,
+  
+  server_pid = nil,
 }
 
 local function build_binary_name()
@@ -176,6 +178,49 @@ function M.reject_completion(completion_result)
   end
 end
 
+function M.stop()
+  if M.client_id then
+    local client = lsp.get_client_by_id(M.client_id)
+    if client then
+      -- Store PID before stopping
+      local pid = nil
+      if client.rpc and client.rpc.pid then
+        pid = client.rpc.pid
+      end
+      
+      -- Try graceful stop first
+      lsp.stop_client(M.client_id, true)
+      
+      -- Force kill if we have a PID
+      if pid then
+        vim.defer_fn(function()
+          -- Check if process still exists before killing
+          local check = vim.fn.system(string.format("ps -p %d > /dev/null 2>&1 && echo 'exists'", pid))
+          if vim.trim(check) == "exists" then
+            vim.fn.system(string.format("kill -15 %d 2>/dev/null", pid))
+            vim.defer_fn(function()
+              -- Final force kill if still running
+              local recheck = vim.fn.system(string.format("ps -p %d > /dev/null 2>&1 && echo 'exists'", pid))
+              if vim.trim(recheck) == "exists" then
+                vim.fn.system(string.format("kill -9 %d 2>/dev/null", pid))
+              end
+            end, 500)
+          end
+        end, 100)
+      end
+    end
+    M.client_id = nil
+  end
+  
+  -- Also try to kill using stored PID as fallback
+  if M.server_pid then
+    vim.fn.system(string.format("kill -9 %d 2>/dev/null", M.server_pid))
+    M.server_pid = nil
+  end
+  
+  M.setup_done = false
+end
+
 function M.setup()
   if M.setup_done then
     return
@@ -211,7 +256,13 @@ function M.setup()
       general = {
         positionEncodings = { "utf-16" }
       }
-    }
+    },
+    on_exit = function(code, signal)
+      if code ~= 0 and signal ~= 15 then
+        vim.notify(string.format("[LLM] llm-ls exited with code %d signal %d", code, signal), vim.log.levels.WARN)
+      end
+      M.client_id = nil
+    end,
   })
 
   if client_id == nil then
@@ -232,12 +283,37 @@ function M.setup()
     })
     M.client_id = client_id
 
-    api.nvim_create_autocmd("VimLeavePre", {
+    -- Multiple exit handlers to ensure cleanup
+    api.nvim_create_autocmd({ "VimLeavePre", "ExitPre", "VimLeave" }, {
       group = augroup,
       callback = function()
-        lsp.stop_client(client_id)
+        M.stop()
       end,
     })
+    
+    api.nvim_create_autocmd("UILeave", {
+      group = augroup,
+      callback = function()
+        if vim.v.exiting ~= nil then
+          M.stop()
+        end
+      end,
+    })
+    
+    -- Final safety net using vim.on_exit if available
+    if vim.on_exit then
+      vim.on_exit(function()
+        if M.server_pid then
+          vim.fn.system(string.format("kill -9 %d 2>/dev/null", M.server_pid))
+        end
+      end)
+    end
+    
+    -- Store the PID for emergency cleanup
+    local client = lsp.get_client_by_id(client_id)
+    if client and client.rpc and client.rpc.pid then
+      M.server_pid = client.rpc.pid
+    end
   end
 
   M.setup_done = true
